@@ -11,10 +11,23 @@
 #include <GL/glx.h>
 #include <X11/Xlib.h>
 
+#define TINY_SEL_TRESHOLD 10
+
+struct vec2 {
+  int x, y;
+};
+
+struct selection {
+  struct vec2 start, end;
+};
+
+struct selection selectedArea = {0};
+
 Display* disp = NULL;
 
 Atom deleteAtom = {0};
 bool quit = false;
+bool LMBdown = false;
 
 void on_event(XEvent e) {
   switch(e.type) {
@@ -34,6 +47,39 @@ void on_event(XEvent e) {
       return;
     }
     // ...
+  } break;
+
+  case ButtonPress:
+  case ButtonRelease: {
+    XButtonEvent ev = e.xbutton;
+    bool down = (e.type == ButtonPress);
+    LMBdown = down && ev.button == Button1;
+    if(ev.button == Button1) {
+      if(down) {
+        selectedArea.start = (struct vec2){ ev.x, ev.y };
+        selectedArea.end = (struct vec2){ ev.x, ev.y };
+      } else {
+        if(abs(selectedArea.start.x - selectedArea.end.x) <= TINY_SEL_TRESHOLD
+           && abs(selectedArea.start.y - selectedArea.end.y) <= TINY_SEL_TRESHOLD) {
+          // TODO: make sure selection stays w/in the monitor
+          selectedArea.start = (struct vec2){
+            selectedArea.start.x - 50,
+            selectedArea.start.y - 50
+          };
+          selectedArea.end = (struct vec2){
+            selectedArea.end.x + 50,
+            selectedArea.end.y + 50
+          };
+        }
+      }
+    }
+  } break;
+
+  case MotionNotify: {
+    XMotionEvent ev = e.xmotion;
+    if(LMBdown) {
+      selectedArea.end = (struct vec2){ ev.x, ev.y };
+    }
   } break;
   default: break;
   }
@@ -221,6 +267,8 @@ int main() {
   glUseProgram(shader);
   glUniform1i(glGetUniformLocation(shader, "tex"), 0);
 
+  glUniform2f(glGetUniformLocation(shader, "screenSize"), rwa.width, rwa.height);
+
   XMapWindow(disp, win);
 
   while(true) {
@@ -231,6 +279,9 @@ int main() {
 
     // -- drawing --
     glUseProgram(shader);
+    glUniform2f(glGetUniformLocation(shader, "sel1"), selectedArea.start.x, selectedArea.start.y);
+    glUniform2f(glGetUniformLocation(shader, "sel2"), selectedArea.end.x, selectedArea.end.y);
+
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
