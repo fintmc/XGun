@@ -192,8 +192,8 @@ int main() {
   deleteAtom = XInternAtom(disp, "WM_DELETE_WINDOW", False);
   XSetWMProtocols(disp, win, &deleteAtom, 1);
 
-  char* name = "SG";
-  char* class = "ScreenGun";
+  char* name = "XG";
+  char* class = "XGun";
   XClassHint hint = {
     .res_class = class,
     .res_name = name
@@ -263,7 +263,7 @@ int main() {
   glEnableVertexAttribArray(1);
   glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4*sizeof(float), (void*)(2*sizeof(float)));
 
-  GLuint shader = make_shaders("./sg.vert", "./sg.frag");
+  GLuint shader = make_shaders("./xg.vert", "./xg.frag");
   glUseProgram(shader);
   glUniform1i(glGetUniformLocation(shader, "tex"), 0);
 
