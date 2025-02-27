@@ -11,7 +11,15 @@
 #include <GL/glx.h>
 #include <X11/Xlib.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
+
 #define TINY_SEL_TRESHOLD 10
+
+#ifndef MIN
+ #define MIN(a, b) \
+   ((a) < (b) ? (a) : (b))
+#endif
 
 struct vec2 {
   int x, y;
@@ -29,6 +37,28 @@ Atom deleteAtom = {0};
 bool quit = false;
 bool LMBdown = false;
 
+void capture_screenshot() {
+  size_t
+    xsz = abs(selectedArea.end.x - selectedArea.start.x),
+    ysz = abs(selectedArea.end.y - selectedArea.start.y),
+    ssz = xsz * ysz;
+  size_t min_x = MIN(selectedArea.start.x, selectedArea.end.x);
+  size_t min_y = MIN(selectedArea.start.y, selectedArea.end.y);
+
+  XImage* screenshot = XGetImage(disp, XDefaultRootWindow(disp), min_x, min_y, xsz, ysz, AllPlanes, ZPixmap);
+  // because silly xlib uses BGR instead of RGB, we need
+  //   to swap red and blue here manually.
+  // as a bonus, data also has the alpha channel set to 0
+  for(size_t i = 0; i < ssz; i++) {
+    char blue = screenshot->data[i*4 +0];
+    screenshot->data[i*4 +0] = screenshot->data[i*4 +2];
+    screenshot->data[i*4 +2] = blue;
+    screenshot->data[i*4 +3] = 255;
+  }
+  stbi_write_png("image.png", xsz, ysz, 4, screenshot->data, 4*xsz);
+  quit = true;
+}
+
 void on_event(XEvent e) {
   switch(e.type) {
   case ClientMessage: { // exiting
@@ -42,9 +72,19 @@ void on_event(XEvent e) {
   case KeyRelease: {
     bool down = (e.type == KeyPress);
     KeySym ks = XLookupKeysym(&e.xkey, 0);
-    if(ks == XK_q && !down) {
-      quit = true;
-      return;
+    if(!down) {
+      switch(ks) {
+      case XK_Escape:
+      case XK_q: {
+        quit = true;
+        return;
+      }
+
+      case XK_c: {
+        capture_screenshot();
+      } break;
+
+      }
     }
     // ...
   } break;
@@ -221,20 +261,19 @@ int main() {
                screenImage->width,
                screenImage->height,
                0,
-               GL_BGRA,
+               GL_BGRA, // TODO: hardcoded format
                GL_UNSIGNED_BYTE,
                screenImage->data);
   glGenerateMipmap(GL_TEXTURE_2D);
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
-  GLuint vao, vbo, ebo;
+  GLuint vao, vbo;
   glGenVertexArrays(1, &vao);
   glGenBuffers(1, &vbo);
-  glGenBuffers(1, &ebo);
 
   glBindVertexArray(vao);
 
@@ -246,16 +285,8 @@ int main() {
         1,  1,       1, 0         // bot right
   };
 
-  /*unsigned int indices[] = {
-    0, 1, 2,
-    1, 2, 3
-  };*/
-
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-  //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-  //glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
   glBindVertexArray(vao);
   glEnableVertexAttribArray(0);
@@ -265,8 +296,8 @@ int main() {
 
   GLuint shader = make_shaders("./xg.vert", "./xg.frag");
   glUseProgram(shader);
-  glUniform1i(glGetUniformLocation(shader, "tex"), 0);
 
+  glUniform1i(glGetUniformLocation(shader, "tex"), 0);
   glUniform2f(glGetUniformLocation(shader, "screenSize"), rwa.width, rwa.height);
 
   XMapWindow(disp, win);
@@ -284,12 +315,10 @@ int main() {
 
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, screenTex);
 
-    //glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
     glXSwapBuffers(disp, win);

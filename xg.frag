@@ -12,16 +12,15 @@ uniform vec2 sel2;
 
 float insideBox(vec2 v, vec2 bottomLeft, vec2 topRight) {
   vec2 s = step(bottomLeft, v) - step(topRight, v);
-  return s.x * s.y;
+  return abs(s.x * s.y);
 }
 
 void main() {
   vec4 interm = texture(tex, vPos);
+
   float dim = insideBox(vPos,
                         sel1/screenSize,
                         sel2/screenSize);
-  interm = mix(interm, vec4(vec3(0), 1),
-               (1-abs(dim))*0.6);
 
-  color = interm;
+  color = mix(interm, vec4(vec3(0), 1), (1-dim)*0.6);
 }
